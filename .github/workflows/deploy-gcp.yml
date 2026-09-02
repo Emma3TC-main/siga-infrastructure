@@ -1,0 +1,27 @@
+name: deploy-gcp-reference
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, qa, prod]
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    environment: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 1) Autenticar contra GCP mediante OIDC/Workload Identity Federation.
+      # 2) Obtener imagen con tag/sha aprobado desde Artifact Registry.
+      # 3) Actualizar variable SIGA_VERSION en VM o manifest.
+      # 4) docker compose pull && docker compose up -d (baseline).
+      # 5) Ejecutar smoke tests y health/readiness.
+      # 6) Rollback al tag anterior si el criterio de promoción falla.
+      - run: |
+          echo "Plantilla: completar con IDs GCP reales en el repo siga-infrastructure"
