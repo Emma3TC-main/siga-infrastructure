@@ -1,0 +1,48 @@
+# siga-infrastructure/compose/compose.local.yml
+name: siga-local
+
+services:
+  # PASO 16: Redis (No autoritativo)
+  redis:
+    image: redis:7-alpine
+    container_name: siga_redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # PASO 17: RabbitMQ (Restringido a loopback local)
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: siga_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: siga_mq
+      RABBITMQ_DEFAULT_PASS: siga_mq_secret
+    ports:
+      - "127.0.0.1:5672:5672"   # AMQP
+      - "127.0.0.1:15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  # PASO 18: MinIO (Emulador local de S3/GCS)
+  minio:
+    image: minio/minio:latest
+    container_name: siga_minio
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_secret
+    ports:
+      - "127.0.0.1:9000:9000" # API S3
+      - "127.0.0.1:9001:9001" # Web UI Console
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
