@@ -1,0 +1,72 @@
+# New installations use project-scoped names; never attach existing siga-local volumes.
+name: ${COMPOSE_PROJECT_NAME:?Run Team-Local.ps1 -Action Init}
+services:
+  postgres:
+    image: postgres@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+    environment:
+      POSTGRES_DB: siga
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?Missing secret}
+      SIGA_IAM_PASSWORD: ${SIGA_IAM_PASSWORD:?Missing secret}
+      SIGA_TEST_PASSWORD: ${SIGA_TEST_PASSWORD:?Missing secret}
+    ports: ["127.0.0.1:${LOCAL_POSTGRES_PORT}:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/05-local-access.sql:/docker-entrypoint-initdb.d/05-local-access.sql:ro
+      - ../postgres/10-identity-role.sql:/docker-entrypoint-initdb.d/10-identity-role.sql:ro
+      - ../postgres/20-test-database.sql:/docker-entrypoint-initdb.d/20-test-database.sql:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d siga"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+  redis:
+    image: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    ports: ["127.0.0.1:${LOCAL_REDIS_PORT}:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis-data:/data]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  rabbitmq:
+    image: rabbitmq@sha256:b1188ba346ab5748add82f46ac58c7df993ee91d762915f8ac6fcadf2e6c07df
+    environment:
+      RABBITMQ_DEFAULT_USER: siga_mq
+      RABBITMQ_DEFAULT_PASS: ${LOCAL_RABBITMQ_PASSWORD:?Missing secret}
+    ports:
+      - "127.0.0.1:${LOCAL_RABBITMQ_PORT}:5672"
+      - "127.0.0.1:${LOCAL_RABBITMQ_UI_PORT}:15672"
+    volumes: [rabbitmq-data:/var/lib/rabbitmq]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    profiles: [storage]
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: ${LOCAL_MINIO_PASSWORD:?Missing secret}
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:${LOCAL_MINIO_PORT}:9000"
+      - "127.0.0.1:${LOCAL_MINIO_UI_PORT}:9001"
+    volumes: [minio-data:/data]
+    networks: [data]
+    restart: unless-stopped
+networks:
+  data:
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:

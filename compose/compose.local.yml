@@ -2,6 +2,26 @@
 name: siga-local
 
 services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: siga
+      POSTGRES_USER: ${LOCAL_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:?Run scripts/Setup-Local.ps1 first}
+      SIGA_IAM_PASSWORD: ${SIGA_IAM_PASSWORD:?Run scripts/Setup-Local.ps1 first}
+    ports:
+      - "127.0.0.1:${LOCAL_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/10-identity-role.sql:/docker-entrypoint-initdb.d/10-identity-role.sql:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
   # PASO 16: Redis (No autoritativo)
   redis:
     image: redis:7-alpine
@@ -12,20 +32,32 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   # PASO 17: RabbitMQ (Restringido a loopback local)
   rabbitmq:
     image: rabbitmq:4-management
     container_name: siga_rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: siga_mq
-      RABBITMQ_DEFAULT_PASS: siga_mq_secret
+      RABBITMQ_DEFAULT_USER: ${LOCAL_RABBITMQ_USER:?Run scripts/Setup-Local.ps1 first}
+      RABBITMQ_DEFAULT_PASS: ${LOCAL_RABBITMQ_PASSWORD:?Run scripts/Setup-Local.ps1 first}
     ports:
       - "127.0.0.1:5672:5672"   # AMQP
       - "127.0.0.1:15672:15672" # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
+    networks: [backend, data]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   # PASO 18: MinIO (Emulador local de S3/GCS)
   minio:
@@ -41,8 +73,14 @@ services:
     volumes:
       - minio_data:/data
     restart: unless-stopped
+    networks: [data]
+
+networks:
+  backend:
+  data:
 
 volumes:
+  postgres-data:
   redis_data:
   rabbitmq_data:
   minio_data:
